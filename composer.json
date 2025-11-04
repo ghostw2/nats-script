@@ -1,0 +1,13 @@
+{
+  "name": "menri/nats-message-retriever",
+  "description": "NATS JetStream message retriever script",
+  "require": {
+    "php": ">=7.4",
+    "basis-company/nats": "^1.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "": "src/"
+    }
+  }
+}
