@@ -3,7 +3,8 @@
   "description": "NATS JetStream message retriever script",
   "require": {
     "php": ">=7.4",
-    "basis-company/nats": "^1.0"
+    "basis-company/nats": "^1.0",
+    "vlucas/phpdotenv": "^5.6"
   },
   "autoload": {
     "psr-4": {

@@ -2,54 +2,92 @@
 require_once __DIR__ . '/vendor/autoload.php';
 use Basis\Nats\Client;
 use Basis\Nats\Configuration;
+  use Dotenv\Dotenv;
+  use Basis\Nats\Stream\RetentionPolicy;
+use Basis\Nats\Stream\StorageBackend;
+use Basis\Nats\Consumer\Configuration as ConsumerConfiguration;
+use Basis\Nats\Consumer\DeliverPolicy;
+
 
 const CORBOS_URL ="dev.autentica";
+ $dotenv = Dotenv::createImmutable(__DIR__);
+ $dotenv->load();
 $configuration = new Configuration(
     ['host'=>'localhost',
     'port'=>4222,
-    'password'=>'password']
+    ]
 );
+$configuration->setDelay(0.001);
 $client = new Client($configuration);
-$client->connect();
+$client->ping(); // true
 try{
-    $accountInfo = $client->getApi()->getInfo();
-    var_dump(accountInfo);
+$stream = $client->getApi()->getStream($_ENV['STREAM_NAME']);
+    
+    // Get stream info
+    $streamInfo = $stream->info();
+    $messageCount = $streamInfo->state->messages;
+    
+    echo "Stream has {$messageCount} messages\n\n";
+    // Create a new ephemeral consumer that starts from the beginning
+    $consumerName = 'replayer_' . time();
+    $consumerConfig = new ConsumerConfiguration($_ENV['STREAM_NAME'], $consumerName);
+     echo "ConsumerConfiguration methods:\n";
+    $methods = get_class_methods($consumerConfig);
+    //var_dump($methods);
+    $consumerConfig->setDeliverPolicy(DeliverPolicy::BY_START_TIME);
+    
+    $dateTimeOneHourAgo = new DateTime(); // Creates a DateTime object for the current time
+    $dateTimeOneHourAgo->modify('-1 hour');
+    $consumerConfig->setStartTime($dateTimeOneHourAgo);
+    // functional $consumerConfig->setDeliverPolicy(DeliverPolicy::ALL);
+    // $consumerConfig->setAckWait(30);
+    
 
-    //get my stram 
-    $stream = $client->getApi()->getStream("stream_name");
+    // Create consumer by calling getConsumer - it will create if doesn't exist
+    $consumer = new \Basis\Nats\Consumer\Consumer($client, $consumerConfig);
+    $consumer->create();
+    
+    // Set iterations
+    $consumer->setIterations($messageCount);
+   
+    
+    echo "Fetching messages using 'greeter' consumer...\n\n";
+    
+    // Handle messages
+    $messagesReceived = 0;
+    $consumer->handle(function($message) use (&$messagesReceived) {
+        $messagesReceived++;
+        echo "Message {$messagesReceived}:\n";
+        echo "  Subject: " . $message->subject . "\n";
+        echo "  Body: " . $message->body . "\n";
+        echo "\n";
+        
+        // Acknowledge the message
+       // $message->ack();
+    });
+    
+    echo "Done! Received {$messagesReceived} messages.\n";
 
-    $streamInfo = $stream->getInfo();
-
-    echo "\n Stream:".$streamInfo->config->name."\n";
-    echo "\n Total images:".$streamInfo->state->messages."\n\n";
-
-    $consumerConfig = new ConsumerConfiguration([
-        "deliver_policy"=>'all',
-        'ask_policy'=>'explicit',
-        'replay_policy'=>'instant'
-    ]);
-    $consumer = $stream->createConsumer($consumerConfig);
-
-    echo "Fetching all messages... \n\n";
-    $allMessages = [];
-    $totalCount = 0;
-    while( true ){
-        $messages = $consumer->fetch(100,2);
-        if(empty($messages)){
-            echo "no more messages";
-            break;
-        }
-       foreach ($messages as $msg){
-        $totalCount ++;
-        $messageData = [
-            'subject'=>$msg->subject,
-            'payload'=>$msg->payload,
-            'sequence'=>$msg->info() ? $msg->info()->streamSequence:null,
-            'timestamp'=>$msg->info() ? date('Y-m-d H:i:s',$msg->info()->timestampNanos/1000000000):null,
-        ];
-        var_dump($messageData);
-       }
-    }
+    // echo "Fetching all messages... \n\n";
+    // $allMessages = [];
+    // $totalCount = 0;
+    // while( true ){
+    //     $messages = $consumer->fetch(100,2);
+    //     if(empty($messages)){
+    //         echo "no more messages";
+    //         break;
+    //     }
+    //    foreach ($messages as $msg){
+    //     $totalCount ++;
+    //     $messageData = [
+    //         'subject'=>$msg->subject,
+    //         'payload'=>$msg->payload,
+    //         'sequence'=>$msg->info() ? $msg->info()->streamSequence:null,
+    //         'timestamp'=>$msg->info() ? date('Y-m-d H:i:s',$msg->info()->timestampNanos/1000000000):null,
+    //     ];
+    //     var_dump($messageData);
+    //    }
+    // }
 
 
 }
