@@ -9,19 +9,35 @@ use Basis\Nats\Consumer\Configuration as ConsumerConfiguration;
 use Basis\Nats\Consumer\DeliverPolicy;
 
 
-const CORBOS_URL ="dev.autentica";
- $dotenv = Dotenv::createImmutable(__DIR__);
- $dotenv->load();
+$dotenv = Dotenv::createImmutable(__DIR__);
+$dotenv->load();
+
+$corbos_url = $_ENV['CORBOS_URL'];
+$corbos_token = $_ENV['CORBOS_TOKEN'];
+
+$nats_port = $_ENV['NATS_PORT'];
+$nats_host = $_ENV['NATS_HOST'];
+$nats_user = $_ENV['NATS_USER'];
+$nats_password = $_ENV['NATS_PASSWORD'];
+$stream_name = $_ENV["STREAM_NAME"];
+
+$hours_amount = $_ENV['HOURS_AMOUNT'];
+$files_location = $_ENV['UPLOADED_FILE_LOCATION'];
+
+echo $nats_host;
 $configuration = new Configuration(
-    ['host'=>'localhost',
-    'port'=>4222,
+    [
+        'host'=> $nats_host,
+        'port'=>(int)$nats_port,
+        //'user'=>$nats_user,
+        //'pass'=>$nats_password  uncomment these in production
     ]
 );
 $configuration->setDelay(0.001);
 $client = new Client($configuration);
 $client->ping(); // true
 try{
-$stream = $client->getApi()->getStream($_ENV['STREAM_NAME']);
+$stream = $client->getApi()->getStream($stream_name);
     
     // Get stream info
     $streamInfo = $stream->info();
@@ -30,14 +46,12 @@ $stream = $client->getApi()->getStream($_ENV['STREAM_NAME']);
     echo "Stream has {$messageCount} messages\n\n";
     // Create a new ephemeral consumer that starts from the beginning
     $consumerName = 'replayer_' . time();
-    $consumerConfig = new ConsumerConfiguration($_ENV['STREAM_NAME'], $consumerName);
-     echo "ConsumerConfiguration methods:\n";
-    $methods = get_class_methods($consumerConfig);
-    //var_dump($methods);
+    $consumerConfig = new ConsumerConfiguration($stream_name, $consumerName);
+
     $consumerConfig->setDeliverPolicy(DeliverPolicy::BY_START_TIME);
     
     $dateTimeOneHourAgo = new DateTime(); // Creates a DateTime object for the current time
-    $dateTimeOneHourAgo->modify('-1 hour');
+    $dateTimeOneHourAgo->modify('-'.$hours_amount.' hour');
     $consumerConfig->setStartTime($dateTimeOneHourAgo);
     // functional $consumerConfig->setDeliverPolicy(DeliverPolicy::ALL);
     // $consumerConfig->setAckWait(30);
@@ -57,38 +71,22 @@ $stream = $client->getApi()->getStream($_ENV['STREAM_NAME']);
     $messagesReceived = 0;
     $consumer->handle(function($message) use (&$messagesReceived) {
         $messagesReceived++;
-        echo "Message {$messagesReceived}:\n";
+       
+        $json_body =json_decode($message->body,true);
+        if (json_last_error() !== JSON_ERROR_NONE){
+            throw new Exception("JSON ERROR :" .json_last_error_msg);
+            return;
+        }       
+         echo "Message {$messagesReceived}:\n";
         echo "  Subject: " . $message->subject . "\n";
         echo "  Body: " . $message->body . "\n";
+        echo "  orderId:".$json_body['orderId']."\n";
         echo "\n";
-        
         // Acknowledge the message
        // $message->ack();
     });
     
     echo "Done! Received {$messagesReceived} messages.\n";
-
-    // echo "Fetching all messages... \n\n";
-    // $allMessages = [];
-    // $totalCount = 0;
-    // while( true ){
-    //     $messages = $consumer->fetch(100,2);
-    //     if(empty($messages)){
-    //         echo "no more messages";
-    //         break;
-    //     }
-    //    foreach ($messages as $msg){
-    //     $totalCount ++;
-    //     $messageData = [
-    //         'subject'=>$msg->subject,
-    //         'payload'=>$msg->payload,
-    //         'sequence'=>$msg->info() ? $msg->info()->streamSequence:null,
-    //         'timestamp'=>$msg->info() ? date('Y-m-d H:i:s',$msg->info()->timestampNanos/1000000000):null,
-    //     ];
-    //     var_dump($messageData);
-    //    }
-    // }
-
 
 }
 catch (Exception $e ){
@@ -104,9 +102,8 @@ function check_file_exists($filename,$corBosPath){
         return true;
     }
 }
-function resend_file_to_webservice($data,$file){
+function resend_file_to_webservice($data){
     
-    $data = decodeMessageBody(data);
     $doc_uuid = data['document_uuid'];
     echo "document uuid:".doc_uuid;
 
@@ -122,7 +119,7 @@ function resend_file_to_webservice($data,$file){
     $unix_time = $data['unix_time'];
    
     $bytes_file =  file_get_contents($filename);
-    $file_size = 1020;
+    $file_size = mb_strlen($bytes_file);
 
     $json_element = json_encode(
         [
@@ -166,16 +163,20 @@ function resend_file_to_webservice($data,$file){
         echo "cURL Error : ".curl_error($ch);
     }
     
-
-    //add the metadata form the server 
-    //add the login 
-    //recreate the json contents
-    //send the request to corbos webservice
 }
-function decodeMessageBody($string){
-    return "";
+function generate_document_destination($datetime){
+    $year = $datetime->format('Y');
+    $month = $datetime->format('F');
+    $firstDayOfMonth = new DateTime($date->format('Y-m-01'));
+    $currentDay = (int)$datetime->format('j');
+    
+    // Get the day of week for the first day (0=Sunday, 6=Saturday)
+    $firstDayOfWeek = (int)$firstDayOfMonth->format('w');
+    
+    // Calculate week number
+    $weekOfMonth = ceil(($currentDay + $firstDayOfWeek) / 7);
+    return "storage/$year/$month/week$weekOfMonth/";
 }
-
 ?>
 
 
