@@ -191,6 +191,9 @@ function get_corbos_challange(){
     }
 
 }
+function loginCorbos(){
+    
+}
 ?>
 
 
