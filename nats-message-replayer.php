@@ -177,6 +177,20 @@ function generate_document_destination($datetime){
     $weekOfMonth = ceil(($currentDay + $firstDayOfWeek) / 7);
     return "storage/$year/$month/week$weekOfMonth/";
 }
+function get_corbos_challange(){
+    $ch = curl_init($corbosUrl."/webservice.php?operation=getchallenge&username=admin");
+    curl_setopt($ch,CURLOPT_GET,1);
+    // curl_setopt($ch,CURLOPT_POSTFIELDS,http_buld_query($post_data));
+    // curl_setopt($ch,CURLOPT_HTTPHEADER,[
+    //     'corebos-authorization: '. $corebos_token
+    // ]);
+    curl_setopt($ch,CURLOPT_RETURNTRANSFER, true);
+    $response = curl_exec($ch);
+    if (curl_errno($ch)){
+        echo "cURL Error : ".curl_error($ch);
+    }
+
+}
 ?>
 
 
